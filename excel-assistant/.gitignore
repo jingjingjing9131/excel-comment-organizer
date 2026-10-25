@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+.env.save
+.DS_Store
+*.xlsx
+*.xls
+__pycache__/
+.venv/

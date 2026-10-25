@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f3ed">
+  <title>表格整理台 · Excel 工作流</title>
+  <style>
+    :root {
+      --paper: #f5f3ed;
+      --surface: #fffefa;
+      --ink: #202821;
+      --muted: #727a70;
+      --line: #dedfd6;
+      --green: #275b47;
+      --green-soft: #e5eee8;
+      --orange: #c56d42;
+      --orange-soft: #f8e9df;
+      --shadow: 0 18px 48px rgba(35, 48, 39, .07);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--paper); }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .topbar { height: 68px; display: flex; align-items: center; justify-content: space-between; padding: 0 max(28px, calc((100vw - 1220px) / 2)); border-bottom: 1px solid var(--line); background: rgba(255,254,250,.76); }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 730; letter-spacing: -.025em; }
+    .brandmark { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; background: var(--green); color: #fffefa; font-family: Georgia, serif; font-size: 18px; }
+    .top-meta { display: flex; gap: 9px; align-items: center; color: var(--muted); font-size: 12px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #b5b8ae; }
+    .status-dot.ready { background: #4a9a6c; box-shadow: 0 0 0 3px #e2f0e6; }
+    main { width: min(1220px, calc(100% - 48px)); margin: 0 auto; padding: 52px 0 88px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 34px; }
+    .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--orange); font-size: 11px; font-weight: 760; letter-spacing: .13em; text-transform: uppercase; }
+    .eyebrow::before { content: ''; width: 22px; height: 1px; background: currentColor; }
+    h1 { margin: 12px 0 9px; font-family: Georgia, "Songti SC", serif; font-size: clamp(32px, 4vw, 48px); font-weight: 600; letter-spacing: -.045em; line-height: 1.08; }
+    .hero p { max-width: 620px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.8; }
+    .local-badge { display: flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,254,250,.7); color: #4f5d52; font-size: 12px; white-space: nowrap; }
+    .lock { color: var(--green); font-size: 14px; }
+    .workspace { display: grid; grid-template-columns: 285px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .panel { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+    .control-panel { padding: 22px; position: sticky; top: 20px; }
+    .section-kicker { color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: .14em; text-transform: uppercase; }
+    .step-title { margin: 7px 0 18px; font-family: Georgia, "Songti SC", serif; font-size: 23px; font-weight: 600; letter-spacing: -.03em; }
+    .dropzone { display: block; min-height: 146px; padding: 18px; border: 1px dashed #bfc8bd; border-radius: 12px; background: #fafbf7; text-align: center; transition: border .18s, background .18s; cursor: pointer; }
+    .dropzone:hover, .dropzone.drag { border-color: var(--green); background: #f3f8f3; }
+    .upload-icon { width: 35px; height: 35px; display: grid; place-items: center; margin: 0 auto 11px; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: 17px; }
+    .drop-title { display: block; font-size: 13px; font-weight: 700; }
+    .drop-help { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .file-name { display: block; max-width: 100%; margin-top: 9px; overflow: hidden; color: var(--green); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    input[type=file] { display: none; }
+    .sheet-pickers { display: grid; gap: 12px; margin: 18px 0; }
+    .field-label { display: block; margin: 0 0 6px; color: #586158; font-size: 11px; font-weight: 680; }
+    select, .meta-field input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #fff; color: var(--ink); font-size: 12px; }
+    select:focus, input:focus, textarea:focus { border-color: #6c927d !important; box-shadow: 0 0 0 3px rgba(80,132,100,.11); }
+    .primary { width: 100%; min-height: 44px; border: 0; border-radius: 9px; background: var(--green); color: #fffefa; font-size: 13px; font-weight: 720; transition: transform .16s, background .16s; }
+    .primary:hover:not(:disabled) { transform: translateY(-1px); background: #1e4d3b; }
+    .primary:disabled { cursor: not-allowed; opacity: .42; }
+    .privacy-note { display: flex; gap: 8px; margin: 15px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+    .privacy-note span:first-child { color: var(--green); }
+    .model-status { display: flex; align-items: center; gap: 7px; margin-top: 17px; padding-top: 15px; border-top: 1px solid #ecece5; color: var(--muted); font-size: 10px; }
+    .main-panel { min-height: 380px; overflow: hidden; }
+    .empty-state { min-height: 380px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; }
+    .empty-art { width: 106px; height: 106px; display: grid; place-items: center; margin-bottom: 20px; border: 1px solid #e6e4da; border-radius: 28px; background: linear-gradient(145deg, #f8f7f0, #eaf0e9); color: var(--green); font-family: Georgia, serif; font-size: 40px; transform: rotate(-4deg); }
+    .empty-state h2 { margin: 0 0 8px; font-family: Georgia, "Songti SC", serif; font-size: 24px; font-weight: 600; }
+    .empty-state p { max-width: 360px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+    .result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
+    .result-head h2 { margin: 0 0 5px; font-family: Georgia, "Songti SC", serif; font-size: 23px; font-weight: 600; letter-spacing: -.03em; }
+    .result-sub { color: var(--muted); font-size: 11px; }
+    .result-stats { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+    .stat { padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; color: #576258; font-size: 10px; white-space: nowrap; }
+    .stat strong { color: var(--ink); }
+    .notice { margin: 16px 24px 0; padding: 10px 12px; border: 1px solid #ead4bd; border-radius: 9px; background: #fff7ed; color: #80552f; font-size: 11px; line-height: 1.6; }
+    .posts { padding: 5px 24px 20px; }
+    .post-card { padding: 20px 0 22px; border-bottom: 1px solid #e8e8e1; }
+    .post-card:last-child { border-bottom: 0; }
+    .post-heading { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 15px; }
+    .post-number { flex: 0 0 28px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--green-soft); color: var(--green); font-family: Georgia, serif; font-size: 13px; font-weight: 700; }
+    .post-heading h3 { margin: 3px 0 0; font-size: 14px; line-height: 1.5; font-weight: 720; }
+    .post-meta-grid { display: grid; grid-template-columns: repeat(3, minmax(100px, 1fr)); gap: 10px; margin: 0 0 17px; }
+    .meta-field label { display: block; margin: 0 0 5px; color: var(--muted); font-size: 10px; }
+    .meta-field input { min-height: 34px; padding: 7px 8px; font-size: 11px; }
+    .comments-title { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 9px; color: #536056; font-size: 11px; font-weight: 720; }
+    .comments-title small { color: var(--muted); font-size: 10px; font-weight: 450; }
+    .comment-row { display: grid; grid-template-columns: 158px minmax(0, 1fr) 30px; gap: 8px; align-items: start; margin: 7px 0; }
+    .comment-row input, .comment-row textarea { width: 100%; min-height: 34px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: #fff; color: var(--ink); font-size: 11px; line-height: 1.55; resize: vertical; }
+    .comment-row textarea { min-height: 38px; }
+    .remove-comment { width: 30px; height: 32px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #9b8177; font-size: 17px; }
+    .remove-comment:hover { border-color: #efd7cc; background: #fff5f0; color: #ad4b32; }
+    .add-comment { min-height: 31px; margin-top: 3px; padding: 0 10px; border: 1px solid #c9d5ca; border-radius: 7px; background: #f8faf6; color: var(--green); font-size: 10px; font-weight: 650; }
+    .result-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px 20px; border-top: 1px solid var(--line); background: #fcfcf8; }
+    .footer-hint { color: var(--muted); font-size: 10px; line-height: 1.6; }
+    .download { min-height: 40px; padding: 0 17px; border: 0; border-radius: 8px; background: var(--orange); color: #fffefa; font-size: 12px; font-weight: 720; white-space: nowrap; }
+    .download:hover:not(:disabled) { background: #b85e35; }
+    .download:disabled { cursor: not-allowed; opacity: .45; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 5; max-width: min(440px, calc(100vw - 48px)); padding: 12px 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--ink); color: #fff; box-shadow: var(--shadow); font-size: 12px; line-height: 1.5; }
+    .toast[hidden] { display: none; }
+    @media (max-width: 920px) { .workspace { grid-template-columns: 250px minmax(0, 1fr); } .post-meta-grid { grid-template-columns: repeat(2, minmax(100px,1fr)); } }
+    @media (max-width: 720px) { .topbar { padding: 0 18px; } main { width: min(100% - 28px, 600px); padding-top: 34px; } .hero { display: block; } .local-badge { display: inline-flex; margin-top: 18px; } .workspace { grid-template-columns: 1fr; } .control-panel { position: static; } .main-panel { min-height: 260px; } .empty-state { min-height: 260px; } .result-head { display: block; padding: 18px; } .result-stats { justify-content: flex-start; margin-top: 12px; } .posts { padding: 2px 18px 15px; } .post-meta-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .comment-row { grid-template-columns: minmax(85px, 125px) minmax(0, 1fr) 28px; gap: 5px; } .result-footer { align-items: flex-start; flex-direction: column; padding: 15px 18px 18px; } .download { width: 100%; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brandmark">表</span><span>表格整理台</span></div>
+    <div class="top-meta"><span class="status-dot" id="statusDot"></span><span id="statusText">本机运行</span></div>
+  </header>
+  <main>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">EXCEL WORKFLOW · 01</div>
+        <h1>把评论整理好，<br>再交给你确认。</h1>
+        <p>上传工作簿，按模板拆分评论。检查每篇笔记和每条评论，编辑完成后下载 Excel。</p>
+      </div>
+      <div class="local-badge"><span class="lock">⌑</span><span>文件留在本机 · 模型仅接收标题与评论</span></div>
+    </section>
+    <div class="workspace">
+      <aside class="panel control-panel">
+        <div class="section-kicker">01 / SOURCE</div>
+        <div class="step-title">选择工作簿</div>
+        <label class="dropzone" id="dropzone" for="fileInput">
+          <span class="upload-icon">↥</span>
+          <span class="drop-title">拖入 Excel，或点击浏览</span>
+          <span class="drop-help">支持 .xlsx · 文件最大 20 MB</span>
+          <span class="file-name" id="fileName">还没有选择文件</span>
+          <input id="fileInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        </label>
+        <div class="sheet-pickers" id="sheetPickers" hidden>
+          <div><label class="field-label" for="templateSheet">格式模板</label><select id="templateSheet"></select></div>
+          <div><label class="field-label" for="sourceSheet">评论来源</label><select id="sourceSheet"></select></div>
+        </div>
+        <button class="primary" id="processButton" disabled>开始整理评论</button>
+        <div class="privacy-note"><span>●</span><span>点击整理后，仅笔记标题和评论原文会发送给 DeepSeek。原工作簿不会上传到其他存储服务。</span></div>
+        <div class="model-status"><span class="status-dot" id="modelDot"></span><span id="modelStatus">正在读取本地模型配置…</span></div>
+      </aside>
+
+      <section class="panel main-panel" id="resultPanel">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-art">↴</div>
+          <h2>整理结果会出现在这里</h2>
+          <p>先选择包含模板页和评论页的 Excel。处理完成后，你可以直接编辑笔记信息、评论编号和评论内容。</p>
+        </div>
+        <div id="resultView" hidden>
+          <div class="result-head">
+            <div><h2>整理预览</h2><div class="result-sub" id="resultSub">检查结果，修改后下载。</div></div>
+            <div class="result-stats" id="resultStats"></div>
+          </div>
+          <div id="notices"></div>
+          <div class="posts" id="posts"></div>
+          <div class="result-footer">
+            <div class="footer-hint">导出会保留原始来源页，并沿用模板表头与单元格格式。<br>编辑内容只存在于当前页面，刷新后需要重新处理。</div>
+            <button class="download" id="downloadButton">↓　下载整理后的 Excel</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
