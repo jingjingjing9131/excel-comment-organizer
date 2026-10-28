@@ -104,7 +104,7 @@ dropzone.addEventListener('drop', (event) => chooseFile(event.dataTransfer.files
 
 async function processFile() {
   if (!state.base64 || state.busy) return;
-  setBusy(true, 'DeepSeek 正在拆分…');
+  setBusy(true, 'DeepSeek 正在拆分并复核格式…');
   try {
     const response = await postJSON('/api/process', {
       workbookBase64: state.base64,
@@ -182,13 +182,17 @@ function createCommentRow(post, postIndex, comment, commentIndex) {
 }
 
 function renderResult() {
-  const { posts, warnings } = state.result;
+  const { posts, warnings, formatReview } = state.result;
   $('#resultSub').textContent = `${state.file.name} · 修改后的内容会写入导出文件。`;
   const commentCount = posts.reduce((sum, post) => sum + post.comments.length, 0);
   const aiCount = posts.filter((post) => post.splitMode === 'deepseek').length;
   const stats = $('#resultStats');
   stats.replaceChildren();
-  [[`${posts.length} 篇笔记`, posts.length], [`${commentCount} 条评论`, commentCount], [`AI 拆分`, `${aiCount}/${posts.length}`]].forEach(([label, value]) => {
+  const reviewLabel = formatReview?.status === 'passed' ? '通过'
+    : formatReview?.status === 'issues' ? `${formatReview.issues.length} 项待核对`
+      : formatReview?.status === 'error' ? '未完成' : '跳过';
+  [[`${posts.length} 篇笔记`, posts.length], [`${commentCount} 条评论`, commentCount],
+    [`AI 拆分`, `${aiCount}/${posts.length}`], ['格式复核', reviewLabel]].forEach(([label, value]) => {
     const item = document.createElement('span');
     item.className = 'stat';
     const strong = document.createElement('strong');
@@ -204,6 +208,16 @@ function renderResult() {
     notice.textContent = `${warning} 页面仍提供可编辑的拆分结果。`;
     notices.append(notice);
   });
+  if (formatReview) {
+    const notice = document.createElement('div');
+    notice.className = `notice ${formatReview.status === 'passed' ? 'success' : formatReview.status === 'issues' || formatReview.status === 'error' ? 'warning' : 'muted'}`;
+    const details = (formatReview.issues || []).map((issue) => {
+      const row = issue.comment_number ? `第 ${issue.post_number} 篇第 ${issue.comment_number} 条` : `第 ${issue.post_number} 篇`;
+      return `${row} · ${issue.field}：${issue.reason}`;
+    });
+    notice.textContent = [formatReview.message, ...details].join(' ');
+    notices.append(notice);
+  }
 
   const container = $('#posts');
   container.replaceChildren();

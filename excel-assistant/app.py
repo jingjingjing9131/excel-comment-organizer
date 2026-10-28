@@ -201,6 +201,109 @@ def deepseek_split(title: str, raw: str) -> list[dict[str, str]]:
         raise UserError(f'DeepSeek 返回内容无法校验：{exc}')
 
 
+def deepseek_review_format(template_headers: list[str], posts: list[dict]) -> dict:
+    """Ask DeepSeek to review the generated row/column mapping against the template."""
+    api_key = os.environ.get('DEEPSEEK_API_KEY', '').strip()
+    if not api_key:
+        return {
+            'status': 'skipped', 'issues': [],
+            'message': '未配置 DeepSeek API Key，跳过 AI 格式复核；导出仍会按模板列映射生成。',
+        }
+
+    layout = [
+        {'column': 'A', 'header': '序号', 'value': '每篇笔记的序号；该笔记的每条评论行重复'},
+        {'column': 'B', 'header': '平台', 'value': '抖音或小红书'},
+        {'column': 'C', 'header': '产品', 'value': '留空'},
+        {'column': 'D', 'header': '标题', 'value': '笔记标题'},
+        {'column': 'E', 'header': '链接', 'value': '笔记链接'},
+        {'column': 'F', 'header': '创建时间', 'value': '日期，可为空'},
+        {'column': 'G', 'header': '帖子负责人', 'value': '留空'},
+        {'column': 'H', 'header': '点赞截图', 'value': '留空'},
+        {'column': 'I', 'header': '点赞个数', 'value': '留空'},
+        {'column': 'J', 'header': '内容端评论', 'value': '评论编号/类型，例如单评1、盖楼1-1'},
+        {'column': 'K', 'header': '', 'value': '评论原文，每条评论单独一行'},
+        {'column': 'L', 'header': '主楼改写（尾翼）', 'value': '留空，不改写原文'},
+        {'column': 'M', 'header': '图片/ID', 'value': '留空'},
+    ]
+    preview = []
+    for post in posts:
+        comments = post.get('comments', [])
+        preview.append({
+            'post_number': post.get('number'),
+            'expected_comment_row_count': max(1, len(comment_lines(post.get('rawComments', '')))),
+            'comments': [
+                {'comment_number': index, 'label': comment.get('label', ''),
+                 'text': comment.get('text', '')}
+                for index, comment in enumerate(comments, 1)
+            ],
+        })
+
+    model = os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash').strip() or 'deepseek-flash'
+    request_body = {
+        'model': model,
+        'temperature': 0,
+        'response_format': {'type': 'json_object'},
+        'messages': [
+            {
+                'role': 'system',
+                'content': (
+                    '你是 Excel 输出格式复核员。根据模板表头、列映射和预览行，检查数据是否能按模板正确拆分。'
+                    '检查评论数量是否与 expected_comment_row_count 一致；每条评论是否独占一行；编号/类型是否放在 J 列、'
+                    '评论原文是否放在 K 列；是否保持 A-M 列映射、未把缺失字段或改写内容编造出来。'
+                    '这里的复核只检查表头和数据列结构；Excel 单元格样式由程序直接沿用模板。'
+                    '只返回 JSON：{"valid":true,"issues":[]}；有问题时 issues 为对象数组，字段为 post_number、'
+                    'comment_number（可为 null）、field、reason。不要修复数据，不要改写评论。'
+                ),
+            },
+            {
+                'role': 'user',
+                'content': json.dumps({
+                    'template_headers_A_to_M': template_headers,
+                    'required_layout_A_to_M': layout,
+                    'posts': preview,
+                }, ensure_ascii=False),
+            },
+        ],
+    }
+    request = urllib.request.Request(
+        'https://api.deepseek.com/chat/completions',
+        data=json.dumps(request_body).encode('utf-8'),
+        headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            result = json.loads(response.read().decode('utf-8'))
+        decoded = json.loads(result['choices'][0]['message']['content'])
+        valid = decoded.get('valid')
+        issues = decoded.get('issues')
+        if not isinstance(valid, bool) or not isinstance(issues, list):
+            raise ValueError('复核 JSON 缺少 valid 或 issues 字段')
+        normalized_issues = []
+        for issue in issues:
+            if not isinstance(issue, dict) or not isinstance(issue.get('reason'), str):
+                raise ValueError('复核问题格式不正确')
+            normalized_issues.append({
+                'post_number': issue.get('post_number'),
+                'comment_number': issue.get('comment_number'),
+                'field': str(issue.get('field') or '格式'),
+                'reason': issue['reason'],
+            })
+        if valid and normalized_issues:
+            valid = False
+        return {
+            'status': 'passed' if valid else 'issues',
+            'issues': normalized_issues,
+            'message': 'DeepSeek 格式复核通过。' if valid else 'DeepSeek 发现需要检查的格式问题。',
+        }
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
+            KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            'status': 'error', 'issues': [],
+            'message': f'DeepSeek 格式复核未完成：{exc}',
+        }
+
+
 def read_posts(data: bytes, source_sheet_name: str) -> list[dict]:
     wb = open_uploaded_workbook(data)
     if source_sheet_name not in wb.sheetnames:
@@ -262,6 +365,9 @@ def process_workbook(payload: dict) -> dict:
             if not warnings or warnings[-1] != str(exc):
                 warnings.append(str(exc))
         post['number'] = index
+    format_review = deepseek_review_format(
+        [str(value or '').strip() for value in template_headers], posts,
+    )
     return {
         'templateSheet': template_name,
         'sourceSheet': source_name,
@@ -269,6 +375,7 @@ def process_workbook(payload: dict) -> dict:
         'headers': OUTPUT_HEADERS,
         'posts': posts,
         'warnings': warnings,
+        'formatReview': format_review,
     }
 
 
